@@ -1,0 +1,284 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>CSC3007: Lab 2</title>
+
+    <!-- Linking of styles.css and Jquery file -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/lodash.js/0.10.0/lodash.min.js"></script>
+<script src='https://cdn.jsdelivr.net/lodash/4.17.2/lodash.min.js'></script>
+
+    <!-- Header title -->
+    <div id="header">
+        <h2>Singapore Yearly Crime Cases</h2>
+    </div>
+    
+    <!-- Div for button creation -->
+    <div>
+        <select id="yearBtn"></select>
+    </div>
+
+    <!-- Div for SVG chart creation -->
+    <div id="svg_chart"></div>
+
+<script>
+    var url = "https://data.gov.sg/api/action/datastore_search?resource_id=83c21090-bd19-4b54-ab6b-d999c251edcf";
+
+    // For year selection
+    query = '2020';
+    searchURL = url + '&q=' + query;
+
+    crimeData = [];
+
+    fetch(url)
+    .then(response => response.json())
+    .then(data => 
+        {
+            // console.log(data); // check data
+
+            // check if data exist
+            if (data.success == true) {
+                // console.log("data exist");
+                
+                // Store all relevant data under crimeData
+                crimeData = data.result.records;
+
+                // Sort the values in descending order:
+                crimeData.sort(function(a, b) {return b.value-a.value} );
+                console.log('dataset: ', crimeData);
+
+                // Sort the data by given year
+                crimeYears = new Set(crimeData.map(d => d.year))
+
+                // Reference from: https://d3-graph-gallery.com/graph/interactivity_button.html
+                // Initialize the button & add the options to the button
+                d3.select("#yearBtn") // Add a button
+                .selectAll('myOptions') // Next 4 lines add the year options
+                .data(crimeYears)
+                .enter()
+                .append('option')
+                .text(function (d) { return d; }) // text showed in the menu
+                .attr("value", function (d) { return d; }) // corresponding value returned by the button
+
+                
+                // Reference: https://d3-graph-gallery.com/graph/histogram_tooltip.html
+                // Add a tooltip div. Here I define the general feature of the tooltip: stuff that do not depend on the data point.
+                // Its opacity is set to 0: we don't see it by default.
+                var tooltip = d3.select("#svg_chart")
+                .append("div")
+                .style("opacity", 0)
+                .attr("class", "tooltip")
+
+                // A function that change this tooltip when the user hover a point.
+                // Its opacity is set to 1: we can now see it. Plus it set the text and position of tooltip depending on the datapoint (d)                
+                var showTooltip = function(d) {
+                    tooltip
+                    .transition()
+                    .duration(100)
+                    .style("opacity", 1)
+                    tooltip
+                    /* 
+                        Using .on("mouseover", function(d) {console.log("mouseover: ",d)}) 
+                        Look for the path value which is under
+                        d.path[0].__data__.value
+                    */
+                    .html("Total crime cases: " + d.path["0"].__data__.value)
+                    .style("left", 300 + "px")
+                    .style("top", 20 + "px");
+                }
+                var moveTooltip = function(d) {
+                    tooltip
+                    .style("left", 300 + "px")
+                    .style("top", 20 + "px");
+                }
+                // A function that change this tooltip when the leaves a point: just need to set opacity to 0 again
+                var hideTooltip = function(d) {
+                    tooltip
+                    .transition()
+                    .duration(100)
+                    .style("opacity", 0)
+                }
+                
+                
+                /******************************************************
+                    Chart Reference and creating the Chart
+                    https://d3-graph-gallery.com/graph/line_filter.html
+                ******************************************************/
+                // Create the chart
+                let margin = {top: 20, right: 20, bottom: 40, left: 40},
+                width = 1000 - margin.left - margin.right,
+                height = 400 - margin.top - margin.bottom;
+
+                // append the svg object to the body of the page
+                const svg = d3.select("#svg_chart")
+                .append("svg")
+                // .attr("width", width + margin.left + margin.right)
+                // .attr("height", height + margin.top + margin.bottom)
+                .attr("viewBox", "0 0 1000 600") // used viewBox instead for responsive layout
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+                // Create a new array to store the data for that respective year
+                let yearData = [];
+
+                for(key in crimeData) {
+                    if (crimeData[key]['year'] == 2020) {
+                        yearData.push(crimeData[key]);
+                    }
+                };
+                
+                // Sort the values in descending order:
+                yearData.sort(function(a, b) {return b.value-a.value} );
+                console.log("yearData", yearData);
+                
+                // Add scales, height/width of the chart
+                let xScale = d3.scaleBand()
+                    .domain(yearData.map(function(d) { return d.level_2; })) // display the names of the crimes
+                    .rangeRound([0, width])
+                    .padding(0.1);   
+                
+                // Reference for setting maximum Y axis value
+                // http://www.d3noob.org/2012/12/setting-scales-domains-and-ranges-in.html
+                let yScale = d3.scaleLinear()
+                    .domain([0, d3.max(yearData, function(d) { 
+                        // console.log(d.value); // Checking the d.values
+                        return +d.value;
+                    })])
+                    .rangeRound([height, 0]);
+
+                // Add x-axis
+                // Reference for rotating axis text
+                // https://bl.ocks.org/mbostock/4403522
+                svg.append("g")
+                    .attr("class", "axis axis-x")
+                    .attr("transform", "translate(0," + height + ")")
+                    .call(d3.axisBottom(xScale))
+                    .selectAll("text")
+                    .attr("transform", "rotate(-45)")
+                    .style("text-anchor", "end");
+                // Add y-axis
+                svg.append("g")
+                    .attr("class", "axis axis-y")
+                    .call(d3.axisLeft(yScale).ticks(15));
+                
+                // draw the chart for 2020 as default first
+                drawChart(2020)
+
+                /*****************************
+                    Functions Defined below
+                *****************************/
+                // Update the chart to the selected year
+                function drawChart(year) {
+                    // Create a new array to store the data for that respective year
+                    let yearData = [];
+
+                    for(key in crimeData) {
+                        if (crimeData[key]['year'] == year) {
+                            yearData.push(crimeData[key]);
+                        }
+                    };
+
+                    console.log("drawChart yearData", yearData);
+
+                    //xScale domain needs to change based on data set
+                    xScale.domain(yearData.map(function(d) { return d.level_2; }));
+                    svg.select("g .axis-x")
+                        .transition()
+                        .duration(1000)
+                        .call(d3.axisBottom(xScale));
+
+                    // yScale domain also update to year maximum value
+                    yScale.domain([0, d3.max(yearData, function(d) { 
+                        // console.log(d.value); // Checking the d.values
+                        return +d.value;
+                    })]);
+                    svg.select("g .axis-y")
+                        .transition()
+                        .duration(1000)
+                        .call(d3.axisLeft(yScale).ticks(15));
+
+                    svg.selectAll("rect")
+                        .data(yearData)
+                        .join(
+                        enter => enter
+                            .append("rect")
+                            .attr("x", d => xScale(d.level_2))
+                            .attr("y", d => yScale(d.value))
+                            .attr("width", 0)
+                            .attr("height", 0)
+                            .attr("class", "svgRect")
+                            .on("mouseover", showTooltip )
+                            .on("mousemove", moveTooltip )
+                            .on("mouseleave", hideTooltip )
+                            // .on("mouseover", function(d) {console.log("mouseover: ",d)}) // Used to look for the path value
+                        .call(enter => enter.transition()
+                            .duration(1000)
+                            .attr("width", xScale.bandwidth())
+                            .attr("height", d => height - yScale(d.value))
+                        ),
+                        update => update 
+                        .call(update => update.transition()
+                            .duration(1000)
+                            .attr("x", d => xScale(d.level_2))
+                            .attr("y", d => yScale(d.value))
+                            .attr("width", xScale.bandwidth())
+                            .attr("height", d => height - yScale(d.value))
+                        ),
+                        exit => exit
+                        .call(exit => exit.transition()
+                            .duration(1000)
+                            .attr("width", 0)
+                            .attr("height", 0)
+                            .remove()
+                        )
+                        );
+                }
+
+                // Call the function to update the chart based on button click event
+                // Reference: https://d3-graph-gallery.com/graph/interactivity_button.html
+                d3.select("#yearBtn").on("change", function(d) {
+                    // recover the option that has been chosen
+                    var selectedOption = d3.select(this).property("value")
+                    console.log("selectedOption", selectedOption);
+                    
+                    // run the updateChart function with this selected option
+                    drawChart(selectedOption)
+                })
+
+            } else {
+                console.log("data doesn't exist");
+            }
+            
+        }
+    );
+
+// Reference for drop-down list: https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_js_dropdown
+/* When the user clicks on the button, toggle between hiding and showing the dropdown content */
+// function dropDownList() {
+//   document.getElementById("myDropdown").classList.toggle("show");
+// }
+
+// // Close the dropdown if the user clicks outside of it
+// window.onclick = function(event) {
+//   if (!event.target.matches('.dropbtn')) {
+//     var dropdowns = document.getElementsByClassName("dropdown-content");
+//     var i;
+//     for (i = 0; i < dropdowns.length; i++) {
+//       var openDropdown = dropdowns[i];
+//       if (openDropdown.classList.contains('show')) {
+//         openDropdown.classList.remove('show');
+//       }
+//     }
+//   }
+// }
+
+</script>
+
+</body>
+
+</html>
